@@ -1,7 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import type { DirectoryUniversity } from "../lib/directory";
 import { websiteURL, type Collection, type University, type UniversityFields } from "../lib/library";
+import { UniversityDirectory } from "./university-directory";
 
 export type EditorState =
   | { kind: "university"; university?: University }
@@ -43,24 +45,31 @@ function EditorShell({ title, description, onClose, busy, children }: {
   );
 }
 
-function EditorActions({ submit, danger, busy }: { submit: string; danger?: boolean; busy: boolean }) {
+function EditorActions({ submit, danger, busy, disabled }: { submit: string; danger?: boolean; busy: boolean; disabled?: boolean }) {
   return (
     <div className="dialog-actions">
       <Dialog.Close className="button button-secondary" disabled={busy}>Cancel</Dialog.Close>
-      <button type="submit" className={`button ${danger ? "button-danger" : "button-primary"}`} disabled={busy}>{busy ? "Saving…" : submit}</button>
+      <button type="submit" className={`button ${danger ? "button-danger" : "button-primary"}`} disabled={busy || disabled}>{busy ? "Saving…" : submit}</button>
     </div>
   );
 }
 
-export function Editor({ editor, onClose, onUniversity, onCollection, onDelete }: {
+export function Editor({ editor, universities, collections, activeCollectionId, onClose, onUniversity, onCollection, onDelete }: {
   editor: EditorState;
+  universities: University[];
+  collections: Collection[];
+  activeCollectionId?: string;
   onClose: () => void;
-  onUniversity: (fields: UniversityFields, university?: University) => Promise<void>;
+  onUniversity: (fields: UniversityFields, university?: University, collectionIds?: string[]) => Promise<void>;
   onCollection: (name: string, collection?: Collection, universityId?: string) => Promise<void>;
   onDelete: (request: Extract<EditorState, { kind: "remove-university" | "delete-collection" }>) => Promise<void>;
 }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [manual, setManual] = useState(false);
+  const [selected, setSelected] = useState<DirectoryUniversity | null>(null);
+  const addingUniversity = editor.kind === "university" && !editor.university;
+  const showDirectory = addingUniversity && !manual;
 
   async function save(action: () => Promise<void>) {
     if (busy) return;
@@ -94,13 +103,20 @@ export function Editor({ editor, onClose, onUniversity, onCollection, onDelete }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const collectionIds = data.getAll("collection").map(String);
+    if (showDirectory) {
+      if (!selected) return;
+      const { name, location, website, domain, domains, country, countryCode } = selected;
+      void save(() => onUniversity({ name, location, website, domain, domains, country, countryCode }, undefined, collectionIds));
+      return;
+    }
     const name = String(data.get("name") ?? "").trim();
     if (!name) return setError("Enter a name.");
 
     if (editor.kind === "university") {
       const website = websiteURL(String(data.get("website") ?? ""));
       if (website === null) return setError("Enter a valid website, such as example.edu.");
-      void save(() => onUniversity({ name, website, location: String(data.get("location") ?? "").trim() }, editor.university));
+      void save(() => onUniversity({ name, website, location: String(data.get("location") ?? "").trim() }, editor.university, collectionIds));
     }
 
     if (editor.kind === "collection") {
@@ -111,28 +127,58 @@ export function Editor({ editor, onClose, onUniversity, onCollection, onDelete }
   const university = editor.kind === "university";
   const record = university ? editor.university : editor.collection;
   const title = university ? (record ? "Edit university" : "Add university") : (record ? "Rename collection" : "New collection");
-  const description = university ? "Enter the details you want to save in your library." : "Give your collection a name.";
+  const description = addingUniversity ? "Search the directory or enter a university manually."
+    : university ? "Enter the details you want to save in your library." : "Give your collection a name.";
 
   return (
     <EditorShell title={title} description={description} onClose={onClose} busy={busy}>
+      {addingUniversity && (
+        <div className="directory-modes" role="group" aria-label="Add university method">
+          <button type="button" className="button button-secondary" aria-pressed={!manual} disabled={busy}
+            onClick={() => { setManual(false); setError(""); }}>Directory</button>
+          <button type="button" className="button button-secondary" aria-pressed={manual} disabled={busy}
+            onClick={() => { setManual(true); setError(""); }}>Manual entry</button>
+        </div>
+      )}
       <form className="editor-form" onSubmit={submit} onInput={() => { if (error) setError(""); }}>
-        <label>
-          {university ? "University name" : "Collection name"}
-          <input name="name" autoComplete="off" defaultValue={record?.name} required readOnly={busy} maxLength={university ? 120 : 60}
-            placeholder={university ? "e.g. New York University" : "e.g. Fall shortlist"} />
-        </label>
-        {editor.kind === "university" && (
+        {showDirectory ? (
+          <UniversityDirectory saved={universities} selected={selected} busy={busy}
+            onSelect={entry => { setSelected(entry); setError(""); }} />
+        ) : (
           <>
-            <label>Location <span>Optional</span>
-              <input name="location" autoComplete="off" defaultValue={editor.university?.location} readOnly={busy} maxLength={100} placeholder="City, state or country" />
+            <label>
+              {university ? "University name" : "Collection name"}
+              <input name="name" autoComplete="off" defaultValue={record?.name} required readOnly={busy} maxLength={university ? 120 : 60}
+                placeholder={university ? "e.g. New York University" : "e.g. Fall shortlist"} />
             </label>
-            <label>Website <span>Optional</span>
-              <input name="website" inputMode="url" autoComplete="off" defaultValue={editor.university?.website} readOnly={busy} maxLength={250} placeholder="example.edu" />
-            </label>
+            {editor.kind === "university" && (
+              <>
+                <label>Location <span>Optional</span>
+                  <input name="location" autoComplete="off" defaultValue={editor.university?.location} readOnly={busy} maxLength={100} placeholder="City, state or country" />
+                </label>
+                <label>Website <span>Optional</span>
+                  <input name="website" inputMode="url" autoComplete="off" defaultValue={editor.university?.website} readOnly={busy} maxLength={250} placeholder="example.edu" />
+                </label>
+              </>
+            )}
           </>
         )}
+        {addingUniversity && collections.length > 0 && (
+          <div hidden={showDirectory && !selected}>
+            <fieldset className="directory-collections" disabled={busy}>
+              <legend>Collections <span>Optional</span></legend>
+              <div>{collections.map(collection => (
+                <label key={collection.id}>
+                  <input type="checkbox" name="collection" value={collection.id} defaultChecked={collection.id === activeCollectionId} />
+                  {collection.name}
+                </label>
+              ))}</div>
+            </fieldset>
+          </div>
+        )}
         {error && <p role="alert" className="form-error">{error}</p>}
-        <EditorActions submit={record ? "Save changes" : university ? "Add university" : "Create collection"} busy={busy} />
+        <EditorActions submit={record ? "Save changes" : university ? "Add university" : "Create collection"}
+          busy={busy} disabled={showDirectory && !selected} />
       </form>
     </EditorShell>
   );

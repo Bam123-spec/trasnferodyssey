@@ -2,6 +2,10 @@ export type UniversityFields = {
   name: string;
   location: string;
   website: string;
+  domain?: string;
+  domains?: string[];
+  country?: string;
+  countryCode?: string;
 };
 
 export type University = UniversityFields & {
@@ -93,6 +97,27 @@ export function websiteURL(input: string) {
 
 export function searchableText(value: string) {
   return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+}
+
+export function websiteDomain(value: string) {
+  const url = websiteURL(value);
+  return url ? new URL(url).hostname.replace(/^www\./, "").replace(/\.$/, "") : "";
+}
+
+export function findSavedUniversity(universities: University[], fields: UniversityFields, excludeId?: string) {
+  const nameKey = (name: string) => searchableText(name).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const domains = (university: UniversityFields) =>
+    [university.website, university.domain ?? "", ...(university.domains ?? [])].map(websiteDomain).filter(Boolean);
+  const name = nameKey(fields.name);
+  const officialDomains = new Set(domains(fields));
+  const country = searchableText(fields.country ?? "");
+
+  return universities.find(university => {
+    if (university.id === excludeId) return false;
+    const savedCountry = searchableText(university.country ?? "");
+    return (nameKey(university.name) === name && (!country || !savedCountry || country === savedCountry))
+      || domains(university).some(domain => officialDomains.has(domain));
+  });
 }
 
 export function newId() {

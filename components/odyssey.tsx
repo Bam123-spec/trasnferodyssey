@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Cloud, Ellipsis, LayoutGrid, List, Menu as MenuIcon, PanelLeft, PanelLeftClose, Pencil, Plus, Search, Trash2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { collectionColors, newId, searchableText, universityCount, type Collection, type Library, type LibraryChange, type PersistLibrary, type University, type UniversityFields, type View } from "../lib/library";
+import { collectionColors, findSavedUniversity, newId, searchableText, universityCount, websiteDomain, type Collection, type Library, type LibraryChange, type PersistLibrary, type University, type UniversityFields, type View } from "../lib/library";
 import { Editor, type EditorState } from "./editor";
 import { CollectionIcon, Sidebar, type Screen } from "./sidebar";
 import { EmptyState, UniversityItem } from "./university";
@@ -89,16 +89,26 @@ export function LibraryWorkspace({ library, persist, account }: {
     });
   }
 
-  async function saveUniversity(fields: UniversityFields, university?: University) {
+  async function saveUniversity(fields: UniversityFields, university?: University, collectionIds: string[] = []) {
     const id = university?.id ?? newId();
     await commit(previous => {
-      if (university && !previous.universities.some(item => item.id === id)) {
+      const current = previous.universities.find(item => item.id === id);
+      if (university && !current) {
         throw new Error("This university was removed from your library.");
       }
-      const collection = previous.collections.find(item => item.id === activeCollection?.id);
-      const universities = university
-        ? previous.universities.map(item => item.id === id ? { ...item, ...fields } : item)
-        : [{ ...fields, id, collectionIds: collection ? [collection.id] : [] }, ...previous.universities];
+      const sameWebsite = current?.website === fields.website;
+      const saved: University = {
+        ...current, ...fields, id,
+        domain: fields.domain || (sameWebsite ? current?.domain : undefined) || websiteDomain(fields.website) || undefined,
+        domains: fields.domains ?? (sameWebsite ? current?.domains : undefined),
+        collectionIds: current?.collectionIds ?? previous.collections.filter(item => collectionIds.includes(item.id)).map(item => item.id),
+      };
+      if ((!current || current.name !== saved.name || !sameWebsite) && findSavedUniversity(previous.universities, saved, id)) {
+        throw new Error("This university is already in your library.");
+      }
+      const universities = current
+        ? previous.universities.map(item => item.id === id ? saved : item)
+        : [saved, ...previous.universities];
       return { ...previous, universities };
     }, university ? "University updated" : "University added");
     if (!university) setQuery("");
@@ -177,7 +187,7 @@ export function LibraryWorkspace({ library, persist, account }: {
     : library.universities;
   const terms = searchableText(query).split(/\s+/).filter(Boolean);
   const visible = terms.length ? inScope.filter(university => {
-    const text = searchableText(`${university.name} ${university.location} ${university.website}`);
+    const text = searchableText([university.name, university.location, university.website, university.country, university.domain, ...(university.domains ?? [])].join(" "));
     return terms.every(term => text.includes(term));
   }) : inScope;
 
@@ -311,7 +321,8 @@ export function LibraryWorkspace({ library, persist, account }: {
           )}
         </main>
       </div>
-      {editor && <Editor editor={editor} onClose={() => setEditor(null)} onUniversity={saveUniversity}
+      {editor && <Editor editor={editor} universities={library.universities} collections={library.collections}
+        activeCollectionId={activeCollection?.id} onClose={() => setEditor(null)} onUniversity={saveUniversity}
         onCollection={saveCollection} onDelete={deleteRecord} />}
       {notice && <div className="toast" role={notice.warning ? "alert" : "status"}>
         {notice.warning ? <TriangleAlert size={18} /> : <Check size={18} />}{notice.text}

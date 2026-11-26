@@ -560,3 +560,48 @@ button:disabled { cursor: wait; opacity: .65; }
 .account-switch { color: var(--muted); font-size: .875rem; }
 .account-switch button { color: var(--brass); padding-block: 5px; }
 .account-switch button:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.directory-modes { display: flex; gap: 6px; margin-top: 16px; }
+.directory-modes .button { min-height: 34px; }
+.directory-modes [aria-pressed="true"] { color: var(--brass); background: #292720; border-color: #53442f; }
+.directory-modes + .editor-form { margin-top: 13px; }
+.editor-form .directory-input { display: block; float: none; position: relative; }
+.directory-input > svg { position: absolute; left: 10px; top: 12px; pointer-events: none; }
+.directory-input > input { padding-left: 34px; }
+.directory-results {
+  max-height: 248px;
+  overflow: auto;
+  margin-top: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #171815;
+}
+.directory-results li + li { border-top: 1px solid var(--line); }
+.directory-results button, .directory-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+}
+.directory-results button { width: 100%; min-height: 46px; text-align: left; }
+.directory-results button:not(:disabled):hover { background: var(--surface-hover); }
+.directory-results button:focus-visible { outline-offset: -2px; }
+.directory-results button:disabled, .editor-form button:disabled { cursor: default; }
+.directory-results strong, .directory-selection strong { display: block; font-size: .875rem; font-weight: 600; overflow-wrap: anywhere; }
+.directory-results small, .directory-selection p, .directory-message, .directory-saved {
+  display: block;
+  color: var(--muted);
+  font-size: .8125rem;
+  overflow-wrap: anywhere;
+}
+.directory-message { margin-top: 8px; }
+.directory-saved { flex: none; }
+.directory-selection { border: 1px solid var(--line-strong); border-radius: 6px; background: #171815; }
+.directory-selection .button { min-height: 32px; }
+.directory-collections legend { margin-bottom: 4px; font-size: .875rem; font-weight: 550; }
+.directory-collections legend span { margin-left: 6px; color: var(--subtle); font-size: .75rem; font-weight: 450; }
+.directory-collections > div { max-height: 108px; overflow: auto; }
+.directory-collections label { display: flex; align-items: start; gap: 7px; padding: 4px 1px; font-weight: 400; }
+.directory-collections input[type="checkbox"] { width: 15px; height: 15px; flex: none; margin: 3px 0 0; padding: 0; accent-color: var(--brass); }
+.directory-collections input[type="checkbox"]:focus-visible { outline: 2px solid var(--brass); }
