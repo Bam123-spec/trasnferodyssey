@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronRight, Ellipsis, FolderClosed, HardDrive, LayoutGrid, List, Menu as MenuIcon, PanelLeft, PanelLeftClose, Pencil, Plus, Search, Trash2, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronRight, Ellipsis, HardDrive, LayoutGrid, List, Menu as MenuIcon, PanelLeft, PanelLeftClose, Pencil, Plus, Search, Trash2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { collectionColors, newId, searchableText, universityCount, type Collection, type Library, type University, type UniversityFields, type View } from "../lib/library";
 import { updateLibrary, useLibrary } from "../lib/storage";
@@ -205,34 +205,20 @@ export function Odyssey() {
         </header>
 
         <main className="main-content">
-          {page === "library" && (
-            <section className="library-hero" aria-labelledby="library-title">
-              <div className="hero-content">
-                <h1 id="library-title">University library</h1>
-                <p>Keep track of the universities you’re exploring.</p>
-                {addButton}
-              </div>
-            </section>
-          )}
-          {activeCollection && (
-            <div className="page-heading">
-              <div>
-                <div className="collection-heading-icon" style={{ "--collection-color": activeCollection.color } as CSSProperties}><FolderClosed size={22} /></div>
-                <h1>{activeCollection.name}</h1>
-                <p>{universityCount(inScope.length)}</p>
-              </div>
-              <div className="heading-actions">{addButton}{collectionMenu(activeCollection)}</div>
-            </div>
-          )}
           {supportsSearch && (
-            <section className="university-section" aria-labelledby="university-list-title">
-              <div className="section-toolbar">
-                <div className="section-title">
-                  <h2 id="university-list-title">{terms.length ? "Search results" : page === "library" ? "All universities" : "Universities"}</h2>
-                  <span aria-live="polite">{universityCount(visible.length)}</span>
+            <section aria-labelledby="library-title">
+              <header className="library-header">
+                <h1 id="library-title">{activeCollection?.name ?? "University library"}</h1>
+                <p className="library-count" aria-live="polite">
+                  {terms.length > 0 && `${visible.length} of `}
+                  {universityCount(inScope.length)}
+                </p>
+                <div className="heading-actions">
+                  {addButton}
+                  {activeCollection && collectionMenu(activeCollection)}
                 </div>
                 <ViewToggle view={library.view} onChange={changeView} />
-              </div>
+              </header>
               {visible.length ? (
                 <ul className="university-layout" data-view={library.view}>
                   {visible.map(university => (

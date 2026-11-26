@@ -75,7 +75,7 @@ export function UniversityItem(props: UniversityItemProps) {
       <UniversityArt university={university} />
       <div className="university-body">
         <div className="university-info">
-          <h3>{university.name}</h3>
+          <h2>{university.name}</h2>
           {university.location && <p><MapPin size={14} aria-hidden="true" />{university.location}</p>}
         </div>
         <UniversityMenu {...props} />
@@ -90,7 +90,7 @@ export function EmptyState({ title, detail, action, onAction }: {
   return (
     <div className="empty-state">
       <BookOpen size={24} aria-hidden="true" />
-      <h3>{title}</h3>
+      <h2>{title}</h2>
       <p>{detail}</p>
       {action && <button className="button button-secondary" onClick={onAction}>{action}</button>}
     </div>
