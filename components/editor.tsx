@@ -1,12 +1,14 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { DirectoryUniversity } from "../lib/directory";
-import { websiteURL, type Collection, type University, type UniversityFields } from "../lib/library";
+import { logoOverrideURL, universityDomain, websiteURL, type Collection, type University, type UniversityFields } from "../lib/library";
 import { UniversityDirectory } from "./university-directory";
+import { UniversityLogo } from "./university-logo";
 
 export type EditorState =
   | { kind: "university"; university?: University }
+  | { kind: "university-profile"; university: University }
   | { kind: "collection"; collection?: Collection; universityId?: string }
   | { kind: "remove-university"; university: University }
   | { kind: "delete-collection"; collection: Collection };
@@ -54,12 +56,13 @@ function EditorActions({ submit, danger, busy, disabled }: { submit: string; dan
   );
 }
 
-export function Editor({ editor, universities, collections, activeCollectionId, onClose, onUniversity, onCollection, onDelete }: {
+export function Editor({ editor, universities, collections, activeCollectionId, onClose, onEditUniversity, onUniversity, onCollection, onDelete }: {
   editor: EditorState;
   universities: University[];
   collections: Collection[];
   activeCollectionId?: string;
   onClose: () => void;
+  onEditUniversity: (university: University) => void;
   onUniversity: (fields: UniversityFields, university?: University, collectionIds?: string[]) => Promise<void>;
   onCollection: (name: string, collection?: Collection, universityId?: string) => Promise<void>;
   onDelete: (request: Extract<EditorState, { kind: "remove-university" | "delete-collection" }>) => Promise<void>;
@@ -82,6 +85,31 @@ export function Editor({ editor, universities, collections, activeCollectionId, 
     } finally {
       setBusy(false);
     }
+  }
+
+  if (editor.kind === "university-profile") {
+    const university = universities.find(item => item.id === editor.university.id) ?? editor.university;
+    const domain = universityDomain(university);
+    const website = websiteURL(university.website);
+    const memberships = collections.filter(collection => university.collectionIds.includes(collection.id));
+    return (
+      <EditorShell title={university.name} description="University profile" onClose={onClose} busy={false}>
+        <div className="university-profile-summary">
+          <UniversityLogo university={university} className="university-profile-logo" />
+          <dl>
+            {(university.location || university.country) && (
+              <div><dt>Location</dt><dd>{university.location || university.country}</dd></div>
+            )}
+            {domain && <div><dt>Official domain</dt><dd>{domain}</dd></div>}
+            {memberships.length > 0 && <div><dt>Collections</dt><dd>{memberships.map(collection => collection.name).join(", ")}</dd></div>}
+          </dl>
+        </div>
+        <div className="dialog-actions">
+          {website && <a href={website} target="_blank" rel="noreferrer" className="button button-secondary"><ExternalLink size={15} />Visit website</a>}
+          <button className="button button-primary" onClick={() => onEditUniversity(university)}>Edit university</button>
+        </div>
+      </EditorShell>
+    );
   }
 
   if (editor.kind === "remove-university" || editor.kind === "delete-collection") {
@@ -116,7 +144,11 @@ export function Editor({ editor, universities, collections, activeCollectionId, 
     if (editor.kind === "university") {
       const website = websiteURL(String(data.get("website") ?? ""));
       if (website === null) return setError("Enter a valid website, such as example.edu.");
-      void save(() => onUniversity({ name, website, location: String(data.get("location") ?? "").trim() }, editor.university, collectionIds));
+      const logoOverride = logoOverrideURL(String(data.get("logoOverride") ?? ""));
+      if (logoOverride === null) return setError("Enter a valid HTTPS logo image URL.");
+      void save(() => onUniversity({
+        name, website, logoOverride: logoOverride || undefined, location: String(data.get("location") ?? "").trim(),
+      }, editor.university, collectionIds));
     }
 
     if (editor.kind === "collection") {
@@ -158,6 +190,11 @@ export function Editor({ editor, universities, collections, activeCollectionId, 
                 </label>
                 <label>Website <span>Optional</span>
                   <input name="website" inputMode="url" autoComplete="off" defaultValue={editor.university?.website} readOnly={busy} maxLength={250} placeholder="example.edu" />
+                </label>
+                <label>Logo image URL <span>Optional</span>
+                  <input name="logoOverride" inputMode="url" autoComplete="off" defaultValue={editor.university?.logoOverride}
+                    readOnly={busy} maxLength={2048} placeholder="https://example.edu/logo.png" aria-describedby="logo-override-hint" />
+                  <small id="logo-override-hint" className="logo-override-hint">Leave blank to use the official domain.</small>
                 </label>
               </>
             )}

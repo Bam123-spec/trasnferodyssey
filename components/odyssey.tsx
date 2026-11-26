@@ -258,6 +258,7 @@ export function LibraryWorkspace({ library, persist, account }: {
                 <ul className="university-layout" data-view={library.view}>
                   {visible.map(university => (
                     <UniversityItem key={university.id} university={university} collections={library.collections}
+                      onProfile={() => setEditor({ kind: "university-profile", university })}
                       onEdit={() => setEditor({ kind: "university", university })}
                       onRemove={() => setEditor({ kind: "remove-university", university })}
                       onMembership={(id, included) => toggleMembership(university.id, id, included)}
@@ -321,8 +322,9 @@ export function LibraryWorkspace({ library, persist, account }: {
           )}
         </main>
       </div>
-      {editor && <Editor editor={editor} universities={library.universities} collections={library.collections}
-        activeCollectionId={activeCollection?.id} onClose={() => setEditor(null)} onUniversity={saveUniversity}
+      {editor && <Editor key={editor.kind} editor={editor} universities={library.universities} collections={library.collections}
+        activeCollectionId={activeCollection?.id} onClose={() => setEditor(null)}
+        onEditUniversity={university => setEditor({ kind: "university", university })} onUniversity={saveUniversity}
         onCollection={saveCollection} onDelete={deleteRecord} />}
       {notice && <div className="toast" role={notice.warning ? "alert" : "status"}>
         {notice.warning ? <TriangleAlert size={18} /> : <Check size={18} />}{notice.text}

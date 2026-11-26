@@ -1,11 +1,12 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { BookOpen, Check, Ellipsis, ExternalLink, Landmark, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
+import { BookOpen, Check, Ellipsis, ExternalLink, Landmark, MapPin, Pencil, Plus, School, Trash2 } from "lucide-react";
 import Image from "next/image";
-import type { CSSProperties } from "react";
-import { collectionColors, type Collection, type University } from "../lib/library";
+import type { Collection, University } from "../lib/library";
 import { CollectionIcon } from "./sidebar";
+import { UniversityLogo } from "./university-logo";
 
 type UniversityActions = {
+  onProfile: () => void;
   onEdit: () => void;
   onRemove: () => void;
   onMembership: (id: string, included: boolean) => void;
@@ -14,7 +15,7 @@ type UniversityActions = {
 
 type UniversityItemProps = UniversityActions & { university: University; collections: Collection[] };
 
-function UniversityMenu({ university, collections, onEdit, onRemove, onMembership, onNewCollection }: UniversityItemProps) {
+function UniversityMenu({ university, collections, onProfile, onEdit, onRemove, onMembership, onNewCollection }: UniversityItemProps) {
   return (
     <Menu.Root modal={false}>
       <Menu.Trigger className="icon-button more-button" aria-label={`Actions for ${university.name}`}>
@@ -22,6 +23,7 @@ function UniversityMenu({ university, collections, onEdit, onRemove, onMembershi
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content className="action-menu" align="end" sideOffset={7} collisionPadding={12}>
+          <Menu.Item className="menu-item" onSelect={onProfile}><School size={15} />View profile</Menu.Item>
           <Menu.Item className="menu-item" onSelect={onEdit}><Pencil size={15} />Edit university</Menu.Item>
           {university.website && (
             <Menu.Item asChild className="menu-item">
@@ -48,22 +50,16 @@ function UniversityMenu({ university, collections, onEdit, onRemove, onMembershi
   );
 }
 
-function Monogram({ university }: { university: University }) {
-  const initials = university.initials ?? university.name.split(/\s+/).slice(0, 2).map(word => [...word][0]).join("");
-  const color = university.color ?? collectionColors[university.id.charCodeAt(0) % collectionColors.length];
-  return <span className="monogram" style={{ "--monogram-color": color } as CSSProperties} aria-hidden="true">{initials}</span>;
-}
-
 function UniversityArt({ university }: { university: University }) {
   return (
     <div className="university-art" data-id={university.cover ? university.id : undefined}>
       {university.cover ? (
-        <Image src={university.cover} alt="" fill
+        <Image className="university-cover" src={university.cover} alt="" fill
           sizes="(max-width: 580px) 100vw, (max-width: 1100px) 50vw, 33vw"
           style={{ objectPosition: university.coverPosition }}
           onError={event => { event.currentTarget.hidden = true; }} />
       ) : <Landmark className="cover-landmark" aria-hidden="true" strokeWidth={0.75} />}
-      <Monogram university={university} />
+      <UniversityLogo university={university} className="university-card-logo" />
     </div>
   );
 }
@@ -75,7 +71,7 @@ export function UniversityItem(props: UniversityItemProps) {
       <UniversityArt university={university} />
       <div className="university-body">
         <div className="university-info">
-          <h2>{university.name}</h2>
+          <h2><button className="university-profile-trigger" onClick={props.onProfile}>{university.name}</button></h2>
           {university.location && <p><MapPin size={14} aria-hidden="true" />{university.location}</p>}
         </div>
         <UniversityMenu {...props} />

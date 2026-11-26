@@ -6,6 +6,7 @@ export type UniversityFields = {
   domains?: string[];
   country?: string;
   countryCode?: string;
+  logoOverride?: string;
 };
 
 export type University = UniversityFields & {
@@ -102,6 +103,17 @@ export function searchableText(value: string) {
 export function websiteDomain(value: string) {
   const url = websiteURL(value);
   return url ? new URL(url).hostname.replace(/^www\./, "").replace(/\.$/, "") : "";
+}
+
+export function universityDomain(university: UniversityFields) {
+  return websiteDomain(university.domain ?? "") || websiteDomain(university.website)
+    || (university.domains ?? []).map(websiteDomain).find(Boolean) || "";
+}
+
+export function logoOverrideURL(value: string) {
+  if (!value.trim()) return "";
+  const url = websiteURL(value);
+  return url?.startsWith("https://") ? url : null;
 }
 
 export function findSavedUniversity(universities: University[], fields: UniversityFields, excludeId?: string) {
