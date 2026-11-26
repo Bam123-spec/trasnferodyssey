@@ -9,13 +9,13 @@ export type EditorState =
   | { kind: "remove-university"; university: University }
   | { kind: "delete-collection"; collection: Collection };
 
-function EditorShell({ title, description, onClose, children }: {
-  title: string; description: string; onClose: () => void; children: ReactNode;
+function EditorShell({ title, description, onClose, busy, children }: {
+  title: string; description: string; onClose: () => void; busy: boolean; children: ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   return (
-    <Dialog.Root open onOpenChange={open => { if (!open) onClose(); }}>
+    <Dialog.Root open onOpenChange={open => { if (!open && !busy) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content ref={panel} className="dialog-panel"
@@ -33,7 +33,7 @@ function EditorShell({ title, description, onClose, children }: {
               previousFocus.current.focus({ preventScroll: true });
             }
           }}>
-          <Dialog.Close className="icon-button dialog-close" aria-label="Close dialog"><X size={19} /></Dialog.Close>
+          <Dialog.Close className="icon-button dialog-close" aria-label="Close dialog" disabled={busy}><X size={19} /></Dialog.Close>
           <Dialog.Title className="dialog-title">{title}</Dialog.Title>
           <Dialog.Description className="dialog-description">{description}</Dialog.Description>
           {children}
@@ -43,11 +43,11 @@ function EditorShell({ title, description, onClose, children }: {
   );
 }
 
-function EditorActions({ submit, danger }: { submit: string; danger?: boolean }) {
+function EditorActions({ submit, danger, busy }: { submit: string; danger?: boolean; busy: boolean }) {
   return (
     <div className="dialog-actions">
-      <Dialog.Close className="button button-secondary">Cancel</Dialog.Close>
-      <button type="submit" className={`button ${danger ? "button-danger" : "button-primary"}`}>{submit}</button>
+      <Dialog.Close className="button button-secondary" disabled={busy}>Cancel</Dialog.Close>
+      <button type="submit" className={`button ${danger ? "button-danger" : "button-primary"}`} disabled={busy}>{busy ? "Saving…" : submit}</button>
     </div>
   );
 }
@@ -55,11 +55,25 @@ function EditorActions({ submit, danger }: { submit: string; danger?: boolean })
 export function Editor({ editor, onClose, onUniversity, onCollection, onDelete }: {
   editor: EditorState;
   onClose: () => void;
-  onUniversity: (fields: UniversityFields, university?: University) => void;
-  onCollection: (name: string, collection?: Collection, universityId?: string) => string | undefined;
-  onDelete: (request: Extract<EditorState, { kind: "remove-university" | "delete-collection" }>) => void;
+  onUniversity: (fields: UniversityFields, university?: University) => Promise<void>;
+  onCollection: (name: string, collection?: Collection, universityId?: string) => Promise<void>;
+  onDelete: (request: Extract<EditorState, { kind: "remove-university" | "delete-collection" }>) => Promise<void>;
 }) {
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function save(action: () => Promise<void>) {
+    if (busy) return;
+    setError("");
+    setBusy(true);
+    try {
+      await action();
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not save your changes. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (editor.kind === "remove-university" || editor.kind === "delete-collection") {
     const university = editor.kind === "remove-university";
@@ -68,8 +82,11 @@ export function Editor({ editor, onClose, onUniversity, onCollection, onDelete }
       ? `${editor.university.name} will be removed from your library and its collections.`
       : `${editor.collection.name} will be deleted. Its universities will still be in your library.`;
     return (
-      <EditorShell title={title} description={description} onClose={onClose}>
-        <form onSubmit={event => { event.preventDefault(); onDelete(editor); }}><EditorActions submit={title} danger /></form>
+      <EditorShell title={title} description={description} onClose={onClose} busy={busy}>
+        <form onSubmit={event => { event.preventDefault(); void save(() => onDelete(editor)); }}>
+          {error && <p role="alert" className="form-error mt-4">{error}</p>}
+          <EditorActions submit={title} busy={busy} danger />
+        </form>
       </EditorShell>
     );
   }
@@ -83,12 +100,11 @@ export function Editor({ editor, onClose, onUniversity, onCollection, onDelete }
     if (editor.kind === "university") {
       const website = websiteURL(String(data.get("website") ?? ""));
       if (website === null) return setError("Enter a valid website, such as example.edu.");
-      onUniversity({ name, website, location: String(data.get("location") ?? "").trim() }, editor.university);
+      void save(() => onUniversity({ name, website, location: String(data.get("location") ?? "").trim() }, editor.university));
     }
 
     if (editor.kind === "collection") {
-      const result = onCollection(name, editor.collection, editor.universityId);
-      if (result) setError(result);
+      void save(() => onCollection(name, editor.collection, editor.universityId));
     }
   }
 
@@ -98,25 +114,25 @@ export function Editor({ editor, onClose, onUniversity, onCollection, onDelete }
   const description = university ? "Enter the details you want to save in your library." : "Give your collection a name.";
 
   return (
-    <EditorShell title={title} description={description} onClose={onClose}>
+    <EditorShell title={title} description={description} onClose={onClose} busy={busy}>
       <form className="editor-form" onSubmit={submit} onInput={() => { if (error) setError(""); }}>
         <label>
           {university ? "University name" : "Collection name"}
-          <input name="name" autoComplete="off" defaultValue={record?.name} required maxLength={university ? 120 : 60}
+          <input name="name" autoComplete="off" defaultValue={record?.name} required readOnly={busy} maxLength={university ? 120 : 60}
             placeholder={university ? "e.g. New York University" : "e.g. Fall shortlist"} />
         </label>
         {editor.kind === "university" && (
           <>
             <label>Location <span>Optional</span>
-              <input name="location" autoComplete="off" defaultValue={editor.university?.location} maxLength={100} placeholder="City, state or country" />
+              <input name="location" autoComplete="off" defaultValue={editor.university?.location} readOnly={busy} maxLength={100} placeholder="City, state or country" />
             </label>
             <label>Website <span>Optional</span>
-              <input name="website" inputMode="url" autoComplete="off" defaultValue={editor.university?.website} maxLength={250} placeholder="example.edu" />
+              <input name="website" inputMode="url" autoComplete="off" defaultValue={editor.university?.website} readOnly={busy} maxLength={250} placeholder="example.edu" />
             </label>
           </>
         )}
         {error && <p role="alert" className="form-error">{error}</p>}
-        <EditorActions submit={record ? "Save changes" : university ? "Add university" : "Create collection"} />
+        <EditorActions submit={record ? "Save changes" : university ? "Add university" : "Create collection"} busy={busy} />
       </form>
     </EditorShell>
   );

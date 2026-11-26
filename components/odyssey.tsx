@@ -2,10 +2,9 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronRight, Ellipsis, HardDrive, LayoutGrid, List, Menu as MenuIcon, PanelLeft, PanelLeftClose, Pencil, Plus, Search, Trash2, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronRight, Cloud, Ellipsis, LayoutGrid, List, Menu as MenuIcon, PanelLeft, PanelLeftClose, Pencil, Plus, Search, Trash2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { collectionColors, newId, searchableText, universityCount, type Collection, type Library, type University, type UniversityFields, type View } from "../lib/library";
-import { updateLibrary, useLibrary } from "../lib/storage";
+import { collectionColors, newId, searchableText, universityCount, type Collection, type Library, type LibraryChange, type PersistLibrary, type University, type UniversityFields, type View } from "../lib/library";
 import { Editor, type EditorState } from "./editor";
 import { CollectionIcon, Sidebar, type Screen } from "./sidebar";
 import { EmptyState, UniversityItem } from "./university";
@@ -35,8 +34,11 @@ function CollectionMenu({ collection, onRename, onDelete }: {
   );
 }
 
-export function Odyssey() {
-  const library = useLibrary();
+export function LibraryWorkspace({ library, persist, account }: {
+  library: Library;
+  persist: PersistLibrary;
+  account: { email: string; signOut: () => void; busy: boolean; error: string };
+}) {
   const [screen, setScreen] = useState<Screen>({ page: "library" });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -76,58 +78,81 @@ export function Odyssey() {
     window.scrollTo(0, 0);
   }
 
-  function commit(change: (previous: Library) => Library, message?: string) {
-    const saved = updateLibrary(change);
-    if (!saved) setNotice({ text: "Browser storage is unavailable. Changes last until you reload.", warning: true });
-    else if (message) setNotice({ text: message });
+  async function commit(change: LibraryChange, message?: string) {
+    await persist(change);
+    if (message) setNotice({ text: message });
   }
 
-  function saveUniversity(fields: UniversityFields, university?: University) {
-    commit(previous => {
+  function applyChange(change: LibraryChange) {
+    void commit(change).catch(error => {
+      setNotice({ text: error instanceof Error ? error.message : "Could not save your changes. Try again.", warning: true });
+    });
+  }
+
+  async function saveUniversity(fields: UniversityFields, university?: University) {
+    const id = university?.id ?? newId();
+    await commit(previous => {
+      if (university && !previous.universities.some(item => item.id === id)) {
+        throw new Error("This university was removed from your library.");
+      }
+      const collection = previous.collections.find(item => item.id === activeCollection?.id);
       const universities = university
-        ? previous.universities.map(item => item.id === university.id ? { ...item, ...fields } : item)
-        : [{ ...fields, id: newId(), collectionIds: activeCollection ? [activeCollection.id] : [] }, ...previous.universities];
+        ? previous.universities.map(item => item.id === id ? { ...item, ...fields } : item)
+        : [{ ...fields, id, collectionIds: collection ? [collection.id] : [] }, ...previous.universities];
       return { ...previous, universities };
     }, university ? "University updated" : "University added");
     if (!university) setQuery("");
     setEditor(null);
   }
 
-  function saveCollection(name: string, collection?: Collection, universityId?: string) {
-    if (library.collections.some(item => item.id !== collection?.id && item.name.toLowerCase() === name.toLowerCase())) {
-      return "A collection with that name already exists.";
-    }
-    const added: Collection = { id: newId(), name, color: collectionColors[library.collections.length % collectionColors.length] };
-    commit(previous => ({
-      ...previous,
-      collections: collection
-        ? previous.collections.map(item => item.id === collection.id ? { ...item, name } : item)
-        : [...previous.collections, added],
-      universities: universityId
-        ? previous.universities.map(item => item.id === universityId ? { ...item, collectionIds: [...item.collectionIds, added.id] } : item)
-        : previous.universities,
-    }), collection ? "Collection renamed" : universityId ? "Collection created and university added" : "Collection created");
+  async function saveCollection(name: string, collection?: Collection, universityId?: string) {
+    const id = collection?.id ?? newId();
+    await commit(previous => {
+      if (previous.collections.some(item => item.id !== id && item.name.toLowerCase() === name.toLowerCase())) {
+        throw new Error("A collection with that name already exists.");
+      }
+      if (collection && !previous.collections.some(item => item.id === id)) {
+        throw new Error("This collection was removed from your library.");
+      }
+      if (universityId && !previous.universities.some(item => item.id === universityId)) {
+        throw new Error("This university was removed from your library.");
+      }
+      return {
+        ...previous,
+        collections: collection
+          ? previous.collections.map(item => item.id === id ? { ...item, name } : item)
+          : [...previous.collections, { id, name, color: collectionColors[previous.collections.length % collectionColors.length] }],
+        universities: universityId
+          ? previous.universities.map(item => item.id === universityId ? { ...item, collectionIds: [...item.collectionIds, id] } : item)
+          : previous.universities,
+      };
+    }, collection ? "Collection renamed" : universityId ? "Collection created and university added" : "Collection created");
     setEditor(null);
-    if (!collection && !universityId) navigate({ page: "collection", id: added.id });
+    if (!collection && !universityId) navigate({ page: "collection", id });
   }
 
   function toggleMembership(universityId: string, collectionId: string, included: boolean) {
-    commit(previous => ({
-      ...previous,
-      universities: previous.universities.map(item => {
-        if (item.id !== universityId) return item;
-        const others = item.collectionIds.filter(id => id !== collectionId);
-        return { ...item, collectionIds: included ? [...others, collectionId] : others };
-      }),
-    }));
+    applyChange(previous => {
+      if (!previous.collections.some(item => item.id === collectionId)) {
+        throw new Error("This collection was removed from your library.");
+      }
+      return {
+        ...previous,
+        universities: previous.universities.map(item => {
+          if (item.id !== universityId || item.collectionIds.includes(collectionId) === included) return item;
+          const others = item.collectionIds.filter(id => id !== collectionId);
+          return { ...item, collectionIds: included ? [...others, collectionId] : others };
+        }),
+      };
+    });
   }
 
-  function deleteRecord(request: Extract<EditorState, { kind: "remove-university" | "delete-collection" }>) {
+  async function deleteRecord(request: Extract<EditorState, { kind: "remove-university" | "delete-collection" }>) {
     if (request.kind === "remove-university") {
-      commit(previous => ({ ...previous, universities: previous.universities.filter(item => item.id !== request.university.id) }), "University removed");
+      await commit(previous => ({ ...previous, universities: previous.universities.filter(item => item.id !== request.university.id) }), "University removed");
     } else {
       const { id } = request.collection;
-      commit(previous => ({
+      await commit(previous => ({
         ...previous,
         collections: previous.collections.filter(item => item.id !== id),
         universities: previous.universities.map(item => ({ ...item, collectionIds: item.collectionIds.filter(collectionId => collectionId !== id) })),
@@ -143,7 +168,7 @@ export function Odyssey() {
   }
 
   function changeView(view: View) {
-    if (view !== library.view) commit(previous => ({ ...previous, view }));
+    applyChange(previous => previous.view === view ? previous : { ...previous, view });
   }
 
   const sidebarProps = { screen, collections: library.collections, navigate, onCreate: () => createCollection() };
@@ -172,7 +197,7 @@ export function Odyssey() {
           <div className="topbar-left">
             <button className="icon-button desktop-toggle" aria-label={library.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-expanded={!library.sidebarCollapsed} title={library.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              onClick={() => commit(previous => ({ ...previous, sidebarCollapsed: !previous.sidebarCollapsed }))}>
+              onClick={() => applyChange(previous => ({ ...previous, sidebarCollapsed: !previous.sidebarCollapsed }))}>
               {library.sidebarCollapsed ? <PanelLeft size={19} /> : <PanelLeftClose size={19} />}
             </button>
             <Dialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -270,8 +295,15 @@ export function Odyssey() {
                   <ViewToggle view={library.view} onChange={changeView} />
                 </div>
                 <div className="settings-row">
-                  <div><h2>Local storage</h2><p>Universities, collections, and preferences are saved in this browser.</p></div>
-                  <HardDrive size={20} className="storage-icon" aria-hidden="true" />
+                  <div><h2>Cloud storage</h2><p>Universities, collections, and preferences are saved to your account.</p></div>
+                  <Cloud size={20} className="storage-icon" aria-hidden="true" />
+                </div>
+                <div className="settings-row">
+                  <div className="min-w-0 break-words">
+                    <h2>Account</h2><p>{account.email}</p>
+                    {account.error && <p role="alert">{account.error}</p>}
+                  </div>
+                  <button className="button button-secondary" disabled={account.busy} onClick={account.signOut}>Sign out</button>
                 </div>
               </div>
               <a className="photo-credits" href="/photo-credits.txt" target="_blank" rel="noreferrer">Campus photo credits</a>

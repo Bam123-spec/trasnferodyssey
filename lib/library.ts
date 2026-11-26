@@ -24,6 +24,16 @@ export type Library = {
   sidebarCollapsed: boolean;
 };
 
+export type LibraryChange = (previous: Library) => Library;
+export type PersistLibrary = (change: LibraryChange) => Promise<void>;
+
+export function isLibrary(value: unknown): value is Library {
+  if (!value || typeof value !== "object") return false;
+  const library = value as Partial<Library>;
+  return library.version === 1 && Array.isArray(library.universities) && Array.isArray(library.collections)
+    && (library.view === "grid" || library.view === "list") && typeof library.sidebarCollapsed === "boolean";
+}
+
 export const collectionColors = ["#d9ae75", "#ae9bc5", "#8dad97", "#a2acc9", "#cb9294"];
 
 export const sampleLibrary: Library = {
