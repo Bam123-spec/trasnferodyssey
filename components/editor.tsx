@@ -1,8 +1,10 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { ExternalLink, X } from "lucide-react";
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ExternalLink } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import type { DirectoryUniversity } from "../lib/directory";
 import { logoOverrideURL, universityDomain, websiteURL, type Collection, type University, type UniversityFields } from "../lib/library";
+import { EditorShell } from "./editor-shell";
+import { CampusCoverImage, PhotoAttribution } from "./campus-cover";
 import { UniversityDirectory } from "./university-directory";
 import { UniversityLogo } from "./university-logo";
 
@@ -12,40 +14,6 @@ export type EditorState =
   | { kind: "collection"; collection?: Collection; universityId?: string }
   | { kind: "remove-university"; university: University }
   | { kind: "delete-collection"; collection: Collection };
-
-function EditorShell({ title, description, onClose, busy, children }: {
-  title: string; description: string; onClose: () => void; busy: boolean; children: ReactNode;
-}) {
-  const panel = useRef<HTMLDivElement>(null);
-  const previousFocus = useRef<HTMLElement | null>(null);
-  return (
-    <Dialog.Root open onOpenChange={open => { if (!open && !busy) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content ref={panel} className="dialog-panel"
-          onOpenAutoFocus={event => {
-            if (document.activeElement instanceof HTMLElement) previousFocus.current = document.activeElement;
-            const firstField = panel.current?.querySelector<HTMLElement>("input, .dialog-actions button");
-            if (firstField) {
-              event.preventDefault();
-              firstField.focus({ preventScroll: true });
-            }
-          }}
-          onCloseAutoFocus={event => {
-            if (previousFocus.current?.isConnected) {
-              event.preventDefault();
-              previousFocus.current.focus({ preventScroll: true });
-            }
-          }}>
-          <Dialog.Close className="icon-button dialog-close" aria-label="Close dialog" disabled={busy}><X size={19} /></Dialog.Close>
-          <Dialog.Title className="dialog-title">{title}</Dialog.Title>
-          <Dialog.Description className="dialog-description">{description}</Dialog.Description>
-          {children}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
 
 function EditorActions({ submit, danger, busy, disabled }: { submit: string; danger?: boolean; busy: boolean; disabled?: boolean }) {
   return (
@@ -94,6 +62,15 @@ export function Editor({ editor, universities, collections, activeCollectionId, 
     const memberships = collections.filter(collection => university.collectionIds.includes(collection.id));
     return (
       <EditorShell title={university.name} description="University profile" onClose={onClose} busy={false}>
+        {(university.cover || university.coverPhoto) && (
+          <figure className="profile-campus-cover">
+            <div><CampusCoverImage university={university} /></div>
+            {university.coverPhoto?.source === "wikimedia" && <PhotoAttribution photo={university.coverPhoto} />}
+            {university.cover && !university.coverPhoto && (
+              <a className="cover-attribution" href="/photo-credits.txt" target="_blank" rel="noreferrer">Campus photo credits</a>
+            )}
+          </figure>
+        )}
         <div className="university-profile-summary">
           <UniversityLogo university={university} className="university-profile-logo" />
           <dl>

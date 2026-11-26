@@ -168,7 +168,7 @@ function AccountLibrary({ client, user }: { client: SupabaseClient; user: User }
     <LibraryWorkspace
       library={saved.library}
       persist={async change => { setSaved(await repository.save(change)); }}
-      account={{ email: user.email ?? "", signOut, busy: signingOut, error: signOutError }}
+      account={{ id: user.id, email: user.email ?? "", signOut, busy: signingOut, error: signOutError }}
     />
   );
 }

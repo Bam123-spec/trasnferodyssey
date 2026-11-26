@@ -1,12 +1,13 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { BookOpen, Check, Ellipsis, ExternalLink, Landmark, MapPin, Pencil, Plus, School, Trash2 } from "lucide-react";
-import Image from "next/image";
+import { BookOpen, Check, Ellipsis, ExternalLink, ImagePlus, Landmark, MapPin, Pencil, Plus, School, Trash2 } from "lucide-react";
 import type { Collection, University } from "../lib/library";
+import { CampusCoverImage, PhotoAttribution } from "./campus-cover";
 import { CollectionIcon } from "./sidebar";
 import { UniversityLogo } from "./university-logo";
 
 type UniversityActions = {
   onProfile: () => void;
+  onChangeCover: () => void;
   onEdit: () => void;
   onRemove: () => void;
   onMembership: (id: string, included: boolean) => void;
@@ -15,7 +16,7 @@ type UniversityActions = {
 
 type UniversityItemProps = UniversityActions & { university: University; collections: Collection[] };
 
-function UniversityMenu({ university, collections, onProfile, onEdit, onRemove, onMembership, onNewCollection }: UniversityItemProps) {
+function UniversityMenu({ university, collections, onProfile, onChangeCover, onEdit, onRemove, onMembership, onNewCollection }: UniversityItemProps) {
   return (
     <Menu.Root modal={false}>
       <Menu.Trigger className="icon-button more-button" aria-label={`Actions for ${university.name}`}>
@@ -24,6 +25,7 @@ function UniversityMenu({ university, collections, onProfile, onEdit, onRemove, 
       <Menu.Portal>
         <Menu.Content className="action-menu" align="end" sideOffset={7} collisionPadding={12}>
           <Menu.Item className="menu-item" onSelect={onProfile}><School size={15} />View profile</Menu.Item>
+          <Menu.Item className="menu-item" onSelect={onChangeCover}><ImagePlus size={15} />Change Cover</Menu.Item>
           <Menu.Item className="menu-item" onSelect={onEdit}><Pencil size={15} />Edit university</Menu.Item>
           {university.website && (
             <Menu.Item asChild className="menu-item">
@@ -52,13 +54,9 @@ function UniversityMenu({ university, collections, onProfile, onEdit, onRemove, 
 
 function UniversityArt({ university }: { university: University }) {
   return (
-    <div className="university-art" data-id={university.cover ? university.id : undefined}>
-      {university.cover ? (
-        <Image className="university-cover" src={university.cover} alt="" fill
-          sizes="(max-width: 580px) 100vw, (max-width: 1100px) 50vw, 33vw"
-          style={{ objectPosition: university.coverPosition }}
-          onError={event => { event.currentTarget.hidden = true; }} />
-      ) : <Landmark className="cover-landmark" aria-hidden="true" strokeWidth={0.75} />}
+    <div className="university-art" data-id={university.cover && !university.coverPhoto ? university.id : undefined}>
+      <Landmark className="cover-landmark" aria-hidden="true" strokeWidth={0.75} />
+      <CampusCoverImage university={university} />
       <UniversityLogo university={university} className="university-card-logo" />
     </div>
   );
@@ -73,6 +71,7 @@ export function UniversityItem(props: UniversityItemProps) {
         <div className="university-info">
           <h2><button className="university-profile-trigger" onClick={props.onProfile}>{university.name}</button></h2>
           {university.location && <p><MapPin size={14} aria-hidden="true" />{university.location}</p>}
+          {university.coverPhoto?.source === "wikimedia" && <PhotoAttribution photo={university.coverPhoto} compact />}
         </div>
         <UniversityMenu {...props} />
       </div>

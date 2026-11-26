@@ -1,3 +1,5 @@
+import type { CampusCover } from "./campus-photos";
+
 export type UniversityFields = {
   name: string;
   location: string;
@@ -13,6 +15,7 @@ export type University = UniversityFields & {
   id: string;
   collectionIds: string[];
   cover?: string;
+  coverPhoto?: CampusCover;
   coverPosition?: string;
   initials?: string;
   color?: string;

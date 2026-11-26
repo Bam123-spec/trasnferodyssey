@@ -4,8 +4,11 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Cloud, Ellipsis, LayoutGrid, List, Menu as MenuIcon, PanelLeft, PanelLeftClose, Pencil, Plus, Search, Trash2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import type { CommonsPhoto } from "../lib/campus-photos";
+import { deleteCampusCover, uploadCampusCover } from "../lib/cover-storage";
 import { collectionColors, findSavedUniversity, newId, searchableText, universityCount, websiteDomain, type Collection, type Library, type LibraryChange, type PersistLibrary, type University, type UniversityFields, type View } from "../lib/library";
 import { Editor, type EditorState } from "./editor";
+import { CoverPicker } from "./cover-picker";
 import { CollectionIcon, Sidebar, type Screen } from "./sidebar";
 import { EmptyState, UniversityItem } from "./university";
 
@@ -37,21 +40,23 @@ function CollectionMenu({ collection, onRename, onDelete }: {
 export function LibraryWorkspace({ library, persist, account }: {
   library: Library;
   persist: PersistLibrary;
-  account: { email: string; signOut: () => void; busy: boolean; error: string };
+  account: { id: string; email: string; signOut: () => void; busy: boolean; error: string };
 }) {
   const [screen, setScreen] = useState<Screen>({ page: "library" });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [coverUniversityId, setCoverUniversityId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<{ text: string; warning?: boolean } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const coverUniversity = library.universities.find(item => item.id === coverUniversityId);
   const activeCollection = screen.page === "collection" ? library.collections.find(item => item.id === screen.id) : undefined;
   const page = screen.page === "collection" && !activeCollection ? "collections" : screen.page;
   const pageName = activeCollection?.name ?? (page === "settings" ? "Settings" : page === "collections" ? "Collections" : "Library");
   const supportsSearch = page === "library" || page === "collection";
 
   useEffect(() => {
-    if (!supportsSearch || editor || mobileOpen) return;
+    if (!supportsSearch || editor || coverUniversity || mobileOpen) return;
     const handleShortcut = (event: KeyboardEvent) => {
       if (
         event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey &&
@@ -63,7 +68,7 @@ export function LibraryWorkspace({ library, persist, account }: {
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [editor, mobileOpen, supportsSearch]);
+  }, [editor, coverUniversity, mobileOpen, supportsSearch]);
 
   useEffect(() => {
     if (!notice) return;
@@ -87,6 +92,30 @@ export function LibraryWorkspace({ library, persist, account }: {
     void commit(change).catch(error => {
       setNotice({ text: error instanceof Error ? error.message : "Could not save your changes. Try again.", warning: true });
     });
+  }
+
+  function cleanUpCover(path: string | undefined) {
+    if (path) void deleteCampusCover(path).catch(() => {
+      setNotice({ text: "The old uploaded photo could not be deleted.", warning: true });
+    });
+  }
+
+  async function saveCover(id: string, selection: CommonsPhoto | File | null) {
+    const coverPhoto = selection instanceof File ? await uploadCampusCover(account.id, selection) : selection ?? undefined;
+    let replacedUpload: string | undefined;
+    await commit(previous => {
+      const university = previous.universities.find(item => item.id === id);
+      if (!university) throw new Error("This university was removed from your library.");
+      replacedUpload = university.coverPhoto?.source === "upload" ? university.coverPhoto.path : undefined;
+      return {
+        ...previous,
+        universities: previous.universities.map(item => item.id === id
+          ? { ...item, cover: undefined, coverPosition: undefined, coverPhoto }
+          : item),
+      };
+    }, coverPhoto ? "Campus cover saved" : "Campus cover removed");
+    cleanUpCover(replacedUpload);
+    setCoverUniversityId(null);
   }
 
   async function saveUniversity(fields: UniversityFields, university?: University, collectionIds: string[] = []) {
@@ -159,7 +188,13 @@ export function LibraryWorkspace({ library, persist, account }: {
 
   async function deleteRecord(request: Extract<EditorState, { kind: "remove-university" | "delete-collection" }>) {
     if (request.kind === "remove-university") {
-      await commit(previous => ({ ...previous, universities: previous.universities.filter(item => item.id !== request.university.id) }), "University removed");
+      let removedUpload: string | undefined;
+      await commit(previous => {
+        const photo = previous.universities.find(item => item.id === request.university.id)?.coverPhoto;
+        removedUpload = photo?.source === "upload" ? photo.path : undefined;
+        return { ...previous, universities: previous.universities.filter(item => item.id !== request.university.id) };
+      }, "University removed");
+      cleanUpCover(removedUpload);
     } else {
       const { id } = request.collection;
       await commit(previous => ({
@@ -259,6 +294,7 @@ export function LibraryWorkspace({ library, persist, account }: {
                   {visible.map(university => (
                     <UniversityItem key={university.id} university={university} collections={library.collections}
                       onProfile={() => setEditor({ kind: "university-profile", university })}
+                      onChangeCover={() => setCoverUniversityId(university.id)}
                       onEdit={() => setEditor({ kind: "university", university })}
                       onRemove={() => setEditor({ kind: "remove-university", university })}
                       onMembership={(id, included) => toggleMembership(university.id, id, included)}
@@ -326,6 +362,8 @@ export function LibraryWorkspace({ library, persist, account }: {
         activeCollectionId={activeCollection?.id} onClose={() => setEditor(null)}
         onEditUniversity={university => setEditor({ kind: "university", university })} onUniversity={saveUniversity}
         onCollection={saveCollection} onDelete={deleteRecord} />}
+      {coverUniversity && <CoverPicker key={coverUniversity.id} university={coverUniversity}
+        onClose={() => setCoverUniversityId(null)} onSave={selection => saveCover(coverUniversity.id, selection)} />}
       {notice && <div className="toast" role={notice.warning ? "alert" : "status"}>
         {notice.warning ? <TriangleAlert size={18} /> : <Check size={18} />}{notice.text}
         <button className="icon-button" onClick={() => setNotice(null)} aria-label="Dismiss message"><X size={16} /></button>
